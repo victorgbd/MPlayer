@@ -1,8 +1,6 @@
-﻿# 🎵 MPlayer - Java ME Audio Player
-
-<p align="center">
-  <img src="src/icons/music_note.png" alt="MPlayer Logo" width="64" height="64" />
-</p>
+<h1 align="center">
+  <img src="src/icons/music_note.png" alt="MPlayer Logo" width="32" height="32" valign="middle" /> MPlayer - Java ME Audio Player
+</h1>
 
 <p align="center">
   <strong>Reproductor multimedia avanzado en pantalla completa para Sony Ericsson K800i y dispositivos J2ME (MIDP 2.0 / CLDC 1.1)</strong>
