@@ -1,0 +1,6 @@
+# Archivos de compilación y empaquetado
+/build/
+/dist/
+
+# Configuraciones locales y privadas de NetBeans
+/nbproject/private/
