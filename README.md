@@ -7,6 +7,9 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/victorgbd/MPlayer/releases/latest">
+    <img src="https://img.shields.io/github/v/release/victorgbd/MPlayer?color=brightgreen&label=Latest%20Release&logo=github" alt="Latest Release" />
+  </a>
   <img src="https://img.shields.io/badge/Platform-J2ME%20%2F%20Java%20ME-orange.svg" alt="Platform" />
   <img src="https://img.shields.io/badge/Profile-MIDP--2.0%20%2F%20CLDC--1.1-blue.svg" alt="Profile" />
   <img src="https://img.shields.io/badge/Resolution-240x320%20QVGA-green.svg" alt="Resolution" />
@@ -125,6 +128,14 @@ MPlayer/
 ├── build.xml                 # Script de compilación Apache Ant
 └── README.md                 # Documentación del proyecto
 ```
+
+---
+
+## 📥 Descargas
+
+Si deseas instalar **MPlayer** directamente en tu teléfono o emulador sin necesidad de compilar el código fuente, puedes descargar los paquetes binarios listos para usar (`.jar` y `.jad`):
+
+👉 **[Descargar la última versión (GitHub Releases)](https://github.com/victorgbd/MPlayer/releases/latest)**
 
 ---
 
