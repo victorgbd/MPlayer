@@ -90,7 +90,9 @@ public class HelpCanvas extends Canvas {
         "* 2. Ondas L\u00E1ser (Osciloscopio)",
         "* 3. T\u00FAnel Estelar 3D (Warp)",
         "* 4. Fuego & Plasma con chispas",
-        "* 5. Ver Pantalla Completa",
+        "* 5. Cubo 3D Rotativo con n\u00FAcleo",
+        "* 6. Pista Infinita Retro con Auto",
+        "* 7. Ver Pantalla Completa",
         "* En Pantalla : Toca el ecualizador para alternar",
         "* Pantalla Completa : Tecla [5] cambia efecto",
         "* Salir : Cualquier tecla"

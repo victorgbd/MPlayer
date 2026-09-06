@@ -62,7 +62,9 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
     public static final int VIZ_SCOPE = 1;
     public static final int VIZ_WARP = 2;
     public static final int VIZ_FIRE = 3;
-    public static final int VIZ_COUNT = 4;
+    public static final int VIZ_CUBE = 4;
+    public static final int VIZ_ROAD = 5;
+    public static final int VIZ_COUNT = 6;
 
     private int activeVisualizer = VIZ_BARS;
     private boolean isScreensaverActive = false;
@@ -78,16 +80,30 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
         "2. Ondas Laser (Scope)",
         "3. Tunel Estelar (Warp)",
         "4. Fuego & Plasma",
-        "5. Ver Pantalla Completa"
+        "5. Cubo 3D Rotativo",
+        "6. Pista Infinita Retro",
+        "7. Ver Pantalla Completa"
     };
 
-    // Datos matematicos para Ondas Laser (Scope)
+    // Datos matematicos para Ondas Laser (Scope) y 3D
     private int wavePhase = 0;
     private static final int[] SIN_TABLE = new int[360];
     static {
         for (int i = 0; i < 360; i++) {
             SIN_TABLE[i] = (int) (Math.sin(i * Math.PI / 180.0) * 1000);
         }
+    }
+
+    private int sinDeg(int deg) {
+        deg = deg % 360;
+        if (deg < 0) deg += 360;
+        return SIN_TABLE[deg];
+    }
+
+    private int cosDeg(int deg) {
+        int d = (deg + 90) % 360;
+        if (d < 0) d += 360;
+        return SIN_TABLE[d];
     }
 
     // Datos para Tunel Estelar 3D (Warp)
@@ -100,6 +116,50 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
     private static final int NUM_FLAMES = 18;
     private final int[] flameHeights = new int[NUM_FLAMES];
     private int flameAnimTick = 0;
+
+    // Datos para Cubo 3D Rotativo
+    private int cubeRotX = 24;
+    private int cubeRotY = 38;
+    private int cubeRotZ = 12;
+    private final int[] cubeProjX = new int[8];
+    private final int[] cubeProjY = new int[8];
+    private final int[] cubeInnerProjX = new int[8];
+    private final int[] cubeInnerProjY = new int[8];
+    private static final int[][] CUBE_VERTICES = {
+        {-100, -100, -100}, // 0
+        { 100, -100, -100}, // 1
+        { 100,  100, -100}, // 2
+        {-100,  100, -100}, // 3
+        {-100, -100,  100}, // 4
+        { 100, -100,  100}, // 5
+        { 100,  100,  100}, // 6
+        {-100,  100,  100}  // 7
+    };
+    private static final int[][] CUBE_FACES = {
+        {0, 1, 2, 3}, // Frontal (Z=-100)
+        {5, 4, 7, 6}, // Trasera (Z=+100)
+        {4, 5, 1, 0}, // Superior (Y=-100)
+        {3, 2, 6, 7}, // Inferior (Y=+100)
+        {1, 5, 6, 2}, // Derecha (X=+100)
+        {4, 0, 3, 7}  // Izquierda (X=-100)
+    };
+    private static final int[] CUBE_FACE_COLORS = {
+        0x003366, // Frente: Azul Cyber
+        0x101b2a, // Trasera: Pizarra oscuro
+        0x004d40, // Superior: Verde Azulado
+        0x311b92, // Inferior: Violeta profundo
+        0x4a148c, // Derecha: Purpura neon
+        0x006064  // Izquierda: Cian oscuro
+    };
+    private static final int[][] CUBE_EDGES = {
+        {0, 1}, {1, 2}, {2, 3}, {3, 0},
+        {4, 5}, {5, 6}, {6, 7}, {7, 4},
+        {0, 4}, {1, 5}, {2, 6}, {3, 7}
+    };
+
+    // Datos para Pista Infinita Retro
+    private int roadScroll = 0;
+    private int roadAnimTick = 0;
 
     // Menu flotante de pantalla completa
     private boolean isMenuOpen = false;
@@ -230,6 +290,17 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
                 flameHeights[i] = Math.max(0, flameHeights[i] - 12);
             }
         }
+
+        // 5. Cubo 3D Rotativo
+        int cubeSpeed = (state == AudioEngine.STATE_PLAYING ? 4 : 1);
+        cubeRotX = (cubeRotX + cubeSpeed) % 360;
+        cubeRotY = (cubeRotY + cubeSpeed * 2) % 360;
+        cubeRotZ = (cubeRotZ + cubeSpeed) % 360;
+
+        // 6. Pista Infinita Retro con Auto
+        int roadSpeed = (state == AudioEngine.STATE_PLAYING ? 24 : 5);
+        roadScroll = (roadScroll + roadSpeed) % 10000;
+        roadAnimTick++;
 
         // Marquee para titulos largos
         Track current = engine.getCurrentTrack();
@@ -770,7 +841,438 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
         }
     }
 
+    private void paintCube(Graphics g, int x, int y, int w, int h) {
+        // Fondo Sci-Fi Cyberpunk
+        g.setColor(0x02050b);
+        g.fillRect(x, y, w, h);
+
+        int cx = x + (w / 2);
+        int cy = y + (h / 2);
+
+        int minDim = (w < h) ? w : h;
+        boolean isPlaying = (engine.getState() == AudioEngine.STATE_PLAYING);
+        int bass = isPlaying ? ((barHeights[0] + barHeights[1]) / 2) : 0;
+
+        // Anillos radar / ondas sonoras concentricas de fondo
+        int ringPhase = (roadAnimTick * 3) % 60;
+        int maxR = minDim / 2;
+        g.setColor(0x0a1624);
+        for (int r = ringPhase; r < maxR; r += 20) {
+            g.drawArc(cx - r, cy - r, r * 2, r * 2, 0, 360);
+        }
+        // Ejes guia cruzados tenues
+        g.setColor(0x081320);
+        g.drawLine(x, cy, x + w, cy);
+        g.drawLine(cx, y, cx, y + h);
+
+        // Escala del cubo segun dimensiones y beat
+        // En pantalla pequena (deck, h < 100) le damos una proporcion mayor para que se aprecie nitido y grande
+        int baseRadius;
+        if (h < 100) {
+            baseRadius = (h * 27) / 100;
+            if (baseRadius < 18) baseRadius = 18;
+        } else {
+            baseRadius = (minDim * 26) / 100;
+        }
+        int beatExpand = isPlaying ? ((bass * baseRadius) / 350) : 0;
+        int scale = baseRadius + beatExpand;
+
+        // Matriz de rotacion (X, Y, Z)
+        int cosX = cosDeg(cubeRotX), sinX = sinDeg(cubeRotX);
+        int cosY = cosDeg(cubeRotY), sinY = sinDeg(cubeRotY);
+        int cosZ = cosDeg(cubeRotZ), sinZ = sinDeg(cubeRotZ);
+
+        int camDist = 300;
+        int fov = 300;
+
+        // 1. Proyectar los 8 vertices exteriores
+        for (int i = 0; i < 8; i++) {
+            int vx = (CUBE_VERTICES[i][0] * scale) / 100;
+            int vy = (CUBE_VERTICES[i][1] * scale) / 100;
+            int vz = (CUBE_VERTICES[i][2] * scale) / 100;
+
+            // Rotar en X
+            int y1 = (vy * cosX - vz * sinX) / 1000;
+            int z1 = (vy * sinX + vz * cosX) / 1000;
+            int x1 = vx;
+
+            // Rotar en Y
+            int x2 = (x1 * cosY + z1 * sinY) / 1000;
+            int z2 = (-x1 * sinY + z1 * cosY) / 1000;
+            int y2 = y1;
+
+            // Rotar en Z
+            int x3 = (x2 * cosZ - y2 * sinZ) / 1000;
+            int y3 = (x2 * sinZ + y2 * cosZ) / 1000;
+            int z3 = z2;
+
+            int zProj = z3 + camDist;
+            if (zProj < 10) zProj = 10;
+
+            cubeProjX[i] = cx + (x3 * fov) / zProj;
+            cubeProjY[i] = cy + (y3 * fov) / zProj;
+        }
+
+        // 2. Dibujar caras solidas visibles (Back-Face Culling)
+        for (int f = 0; f < 6; f++) {
+            int i0 = CUBE_FACES[f][0];
+            int i1 = CUBE_FACES[f][1];
+            int i2 = CUBE_FACES[f][2];
+            int i3 = CUBE_FACES[f][3];
+
+            int x0 = cubeProjX[i0], y0 = cubeProjY[i0];
+            int x1 = cubeProjX[i1], y1 = cubeProjY[i1];
+            int x2 = cubeProjX[i2], y2 = cubeProjY[i2];
+            int x3 = cubeProjX[i3], y3 = cubeProjY[i3];
+
+            // Producto vectorial 2D para culling
+            int cross = (x1 - x0) * (y2 - y1) - (y1 - y0) * (x2 - x1);
+            if (cross > 0) {
+                // Cara frontal visible: sombreado reactivo
+                int faceColor = CUBE_FACE_COLORS[f];
+                if (isPlaying && bass > 40) {
+                    faceColor = (faceColor + 0x181818) & 0xffffff;
+                }
+                g.setColor(faceColor);
+                g.fillTriangle(x0, y0, x1, y1, x2, y2);
+                g.fillTriangle(x0, y0, x2, y2, x3, y3);
+            }
+        }
+
+        // 3. Proyectar y dibujar nucleo pulsante interior (Beat Core)
+        int innerScale = (scale * (35 + (bass * 25 / 100))) / 100;
+        int invRotX = (360 - cubeRotX) % 360;
+        int invRotY = (360 - cubeRotY) % 360;
+        int inCosX = cosDeg(invRotX), inSinX = sinDeg(invRotX);
+        int inCosY = cosDeg(invRotY), inSinY = sinDeg(invRotY);
+
+        for (int i = 0; i < 8; i++) {
+            int vx = (CUBE_VERTICES[i][0] * innerScale) / 100;
+            int vy = (CUBE_VERTICES[i][1] * innerScale) / 100;
+            int vz = (CUBE_VERTICES[i][2] * innerScale) / 100;
+
+            int y1 = (vy * inCosX - vz * inSinX) / 1000;
+            int z1 = (vy * inSinX + vz * inCosX) / 1000;
+            int x1 = vx;
+
+            int x2 = (x1 * inCosY + z1 * inSinY) / 1000;
+            int z2 = (-x1 * inSinY + z1 * inCosY) / 1000;
+            int y2 = y1;
+
+            int zProj = z2 + camDist;
+            if (zProj < 10) zProj = 10;
+
+            cubeInnerProjX[i] = cx + (x2 * fov) / zProj;
+            cubeInnerProjY[i] = cy + (y2 * fov) / zProj;
+        }
+
+        // Aristas del nucleo interior (Rosa Neon / Magenta electrico)
+        g.setColor(isPlaying ? 0xff007f : 0xaa0055);
+        for (int e = 0; e < 12; e++) {
+            int a = CUBE_EDGES[e][0];
+            int b = CUBE_EDGES[e][1];
+            g.drawLine(cubeInnerProjX[a], cubeInnerProjY[a], cubeInnerProjX[b], cubeInnerProjY[b]);
+        }
+
+        // 4. Dibujar las 12 aristas exteriores con efecto Neon Cyan
+        g.setColor(0x00e5ff);
+        for (int e = 0; e < 12; e++) {
+            int a = CUBE_EDGES[e][0];
+            int b = CUBE_EDGES[e][1];
+            g.drawLine(cubeProjX[a], cubeProjY[a], cubeProjX[b], cubeProjY[b]);
+        }
+
+        // 5. Nodos en vertices brillantes
+        g.setColor(0xffffff);
+        for (int i = 0; i < 8; i++) {
+            g.fillRect(cubeProjX[i] - 1, cubeProjY[i] - 1, 3, 3);
+        }
+
+        // Destello central si el beat es muy alto
+        if (isPlaying && bass > 65) {
+            g.setColor(0x00ffff);
+            g.drawRect(cx - 3, cy - 3, 6, 6);
+            g.setColor(0xffffff);
+            g.fillRect(cx - 1, cy - 1, 2, 2);
+        }
+    }
+
+    private void paintRoad(Graphics g, int x, int y, int w, int h) {
+        boolean isPlaying = (engine.getState() == AudioEngine.STATE_PLAYING);
+        int bass = isPlaying ? barHeights[0] : 0;
+
+        // 1. Cielo Synthwave nocturno
+        int hy = y + (h * 36) / 100;
+        int skyH = hy - y;
+        if (skyH < 12) {
+            hy = y + 12;
+            skyH = 12;
+        }
+
+        // Gradiente vertical de cielo
+        int halfSky = skyH / 2;
+        g.setColor(0x090314); // Purpura espacio muy oscuro arriba
+        g.fillRect(x, y, w, halfSky);
+        g.setColor(0x19082c); // Violeta synthwave
+        g.fillRect(x, y + halfSky, w, skyH - halfSky);
+
+        // Estrellas de fondo en el cielo
+        g.setColor(0x80d8ff);
+        g.fillRect(x + (w * 15 / 100), y + (skyH * 25 / 100), 1, 1);
+        g.fillRect(x + (w * 32 / 100), y + (skyH * 60 / 100), 1, 1);
+        g.fillRect(x + (w * 78 / 100), y + (skyH * 35 / 100), 1, 1);
+        g.fillRect(x + (w * 88 / 100), y + (skyH * 70 / 100), 1, 1);
+
+        // Sol Synthwave retro con ranuras horizontales en el horizonte
+        int maxSunR = (h > 100) ? 36 : 18;
+        int sunR = Math.min(maxSunR, skyH / 2);
+        if (sunR > 6) {
+            int sunPulse = isPlaying ? (bass * sunR / 280) : 0;
+            int r = sunR + sunPulse;
+            int sx = x + (w / 2);
+            int sy = hy - 2;
+
+            // Resplandor exterior
+            g.setColor(0x660033);
+            g.fillArc(sx - r - 2, sy - r - 2, (r + 2) * 2, (r + 2) * 2, 0, 180);
+
+            // Sol amarillo/naranja superior
+            g.setColor(0xffaa00);
+            g.fillArc(sx - r, sy - r, r * 2, r * 2, 0, 180);
+
+            // Ranuras horizontales synthwave
+            g.setColor(0x19082c);
+            int slotStep = Math.max(2, r / 4);
+            for (int syLine = sy - (r * 2 / 3); syLine < sy; syLine += slotStep) {
+                g.fillRect(sx - r, syLine, r * 2, 1);
+            }
+        }
+
+        // Silueta de montanas distantes en el horizonte
+        g.setColor(0x120520);
+        int mtnH = Math.min(6, skyH / 3);
+        g.drawLine(x, hy, x + w / 4, hy - mtnH);
+        g.drawLine(x + w / 4, hy - mtnH, x + w / 2, hy);
+        g.drawLine(x + w / 2, hy, x + (w * 3 / 4), hy - mtnH + 2);
+        g.drawLine(x + (w * 3 / 4), hy - mtnH + 2, x + w, hy);
+
+        // Linea brillante del horizonte
+        g.setColor(0xff007f);
+        g.drawLine(x, hy, x + w, hy);
+
+        // 2. Pista en perspectiva 3D
+        int groundH = (y + h) - hy;
+        if (groundH <= 0) return;
+
+        // Curvatura oscilante de la carretera
+        int curveAngle = (roadScroll / 8) % 360;
+        int curveFactor = (sinDeg(curveAngle) * (w / 4)) / 1000;
+
+        int step = (groundH > 80) ? 3 : 2;
+        int lastRcx = x + w / 2;
+
+        for (int py = hy + 1; py < y + h; py += step) {
+            int curH = Math.min(step, (y + h) - py);
+            int relY = py - hy;
+            // Factor t de 0 (horizonte) a 1000 (pie de pantalla)
+            int t = (relY * 1000) / groundH;
+            int t2 = (t * t) / 1000;
+
+            int rcx = (x + w / 2) + (curveFactor * t2) / 1000;
+            int halfW = (w / 14) + (((w * 40 / 100) * t2) / 1000);
+            if (halfW < 6) halfW = 6;
+
+            int seg = ((roadScroll * 2 + relY * 5) / 28) % 2;
+
+            // Terreno a los lados (cyber grid oscuro)
+            g.setColor(seg == 0 ? 0x0c0418 : 0x110722);
+            g.fillRect(x, py, w, curH);
+
+            // Asfalto
+            g.setColor(seg == 0 ? 0x1d1e2b : 0x161722);
+            g.fillRect(rcx - halfW, py, halfW * 2, curH);
+
+            // Cordones laterales (curbs / rumble strips)
+            int curbW = Math.max(2, halfW / 7);
+            g.setColor(seg == 0 ? 0xff0055 : 0xffffff);
+            g.fillRect(rcx - halfW, py, curbW, curH);
+            g.fillRect(rcx + halfW - curbW, py, curbW, curH);
+
+            // Linea central punteada
+            int centerLineW = Math.max(1, halfW / 18);
+            if (seg == 0) {
+                g.setColor(0xffea00); // Amarillo retro
+                g.fillRect(rcx - (centerLineW / 2), py, centerLineW, curH);
+            }
+
+            lastRcx = rcx;
+        }
+
+        // 3. Postes de luz de neon al borde de la pista (sensacion de velocidad)
+        for (int p = 0; p < 3; p++) {
+            int pZ = ((roadScroll * 2) + (p * 333)) % 1000;
+            if (pZ > 120 && pZ < 940) {
+                int pt2 = (pZ * pZ) / 1000;
+                int postPy = hy + (groundH * pZ) / 1000;
+                int postRcx = (x + w / 2) + (curveFactor * pt2) / 1000;
+                int postHalfW = (w / 14) + (((w * 40 / 100) * pt2) / 1000);
+                int postH = Math.max(4, (groundH * pZ) / 3800);
+
+                // Poste izquierdo (Cyan)
+                int poleLx = postRcx - postHalfW - 3;
+                if (poleLx >= x && poleLx < x + w && postPy - postH >= hy) {
+                    g.setColor(0x00d2ff);
+                    g.drawLine(poleLx, postPy, poleLx, postPy - postH);
+                    g.fillRect(poleLx - 1, postPy - postH, 3, 2);
+                }
+
+                // Poste derecho (Magenta)
+                int poleRx = postRcx + postHalfW + 3;
+                if (poleRx >= x && poleRx < x + w && postPy - postH >= hy) {
+                    g.setColor(0xff007f);
+                    g.drawLine(poleRx, postPy, poleRx, postPy - postH);
+                    g.fillRect(poleRx - 1, postPy - postH, 3, 2);
+                }
+            }
+        }
+
+        // 4. El Deportivo Retro (Auto visto desde atras)
+        // En pantalla completa dejamos margen suficiente para no ser tapado por la barra inferior del HUD (22px)
+        int bottomMargin = isScreensaverActive ? 32 : 4;
+        int carW = (h < 100) ? 32 : 54;
+        int carH = (h < 100) ? 14 : 26;
+        int carY = (y + h) - carH - bottomMargin;
+        // Rebote por el ritmo del bajo
+        if (isPlaying && bass > 45) {
+            carY -= 1;
+        }
+
+        // Posicion X centrada con la pista en la posicion exacta de las ruedas del auto
+        int carGroundRelY = (carY + carH) - hy;
+        int carT = (carGroundRelY * 1000) / groundH;
+        int carT2 = (carT * carT) / 1000;
+        int carRcx = (x + w / 2) + (curveFactor * carT2) / 1000;
+        int carX = carRcx - (carW / 2);
+
+        // Neumaticos anchos y dibujo de llantas
+        int tireW = Math.max(5, carW * 14 / 100);
+        int tireH = Math.max(5, carH * 28 / 100);
+        g.setColor(0x0e0e12);
+        g.fillRect(carX + 1, carY + carH - tireH, tireW, tireH);
+        g.fillRect(carX + carW - 1 - tireW, carY + carH - tireH, tireW, tireH);
+        g.setColor(0x282830);
+        g.fillRect(carX + 2, carY + carH - tireH + 1, tireW - 2, tireH - 2);
+        g.fillRect(carX + carW - tireW, carY + carH - tireH + 1, tireW - 2, tireH - 2);
+
+        // Difusor trasero inferior (Grafito oscuro)
+        int diffW = carW - (tireW * 2) - 2;
+        int diffH = Math.max(3, carH * 16 / 100);
+        g.setColor(0x18181c);
+        g.fillRect(carX + tireW + 1, carY + carH - diffH, diffW, diffH);
+
+        // Tubos de escape cromados
+        int exL = carX + tireW + 3;
+        int exR = carX + carW - tireW - 6;
+        int exW = Math.max(3, carW / 16);
+        int exH = Math.max(2, carH / 8);
+        g.setColor(0xaaaaaa);
+        g.fillRect(exL, carY + carH - exH - 1, exW, exH);
+        g.fillRect(exR, carY + carH - exH - 1, exW, exH);
+
+        // Llamas de escape Nitro reactivas con el bajo
+        if (isPlaying && bass > 30) {
+            int flameLen = Math.max(3, (bass * carH) / 120);
+            g.setColor(0x00e5ff); // Llama turbo exterior cian
+            g.fillRect(exL - 1, carY + carH, exW + 2, flameLen);
+            g.fillRect(exR - 1, carY + carH, exW + 2, flameLen);
+            g.setColor(0xffffff); // Nucleo blanco incandescente
+            g.fillRect(exL, carY + carH, exW, Math.max(2, flameLen / 2));
+            g.fillRect(exR, carY + carH, exW, Math.max(2, flameLen / 2));
+        }
+
+        // Chasis principal (Rojo Deportivo Cyber-shot / Rosso Corsa)
+        int bodyY = carY + (carH * 32 / 100);
+        int bodyH = carH - (carH * 32 / 100) - 2;
+        int bodyW = carW - 6;
+        int bodyX = carX + 3;
+
+        g.setColor(0xd50000); // Rojo brillante
+        g.fillRect(bodyX, bodyY, bodyW, bodyH);
+        g.setColor(0x880000); // Sombra inferior del chasis
+        g.drawLine(bodyX, bodyY + bodyH - 1, bodyX + bodyW - 1, bodyY + bodyH - 1);
+
+        // Aleron trasero aerodinamico
+        int wingY = carY + (carH * 16 / 100);
+        int wingH = Math.max(2, carH * 12 / 100);
+        g.setColor(0xff1e38);
+        g.fillRect(carX + 1, wingY, carW - 2, wingH);
+        // Soportes del aleron
+        int strutL = carX + (carW * 22 / 100);
+        int strutR = carX + carW - (carW * 22 / 100) - 2;
+        g.setColor(0x111111);
+        int strutH = bodyY - (wingY + wingH) + 1;
+        if (strutH > 0) {
+            g.fillRect(strutL, wingY + wingH, 2, strutH);
+            g.fillRect(strutR, wingY + wingH, 2, strutH);
+        }
+
+        // Cabina / Ventana trasera polarizada con reflejos
+        int cabW = carW * 52 / 100;
+        int cabH = carH * 38 / 100;
+        int cabX = carX + (carW - cabW) / 2;
+        int cabY = carY;
+        g.setColor(0x07111c);
+        g.fillRect(cabX, cabY, cabW, cabH);
+        // Reflejos de luz en el parabrisas
+        g.setColor(0x00d2ff);
+        g.drawLine(cabX + 2, cabY + 1, cabX + cabW - 3, cabY + 1);
+        if (carH > 18) {
+            g.setColor(0x0077aa);
+            g.drawLine(cabX + 4, cabY + 3, cabX + cabW - 5, cabY + 3);
+        }
+
+        // Luces traseras LED Neon continuas
+        int tailY = bodyY + (bodyH * 22 / 100);
+        int tailH = Math.max(3, bodyH * 38 / 100);
+        int tailW = carW * 24 / 100;
+        int tlX = carX + (carW * 12 / 100);
+        int trX = carX + carW - (carW * 12 / 100) - tailW;
+
+        g.setColor(0xff0033); // Rojo neon
+        g.fillRect(tlX, tailY, tailW, tailH);
+        g.fillRect(trX, tailY, tailW, tailH);
+        // Nucleo blanco incandescente de las luces
+        g.setColor(isPlaying && bass > 40 ? 0xffffff : 0xff8a80);
+        g.drawLine(tlX + 1, tailY + (tailH / 2), tlX + tailW - 2, tailY + (tailH / 2));
+        g.drawLine(trX + 1, tailY + (tailH / 2), trX + tailW - 2, tailY + (tailH / 2));
+
+        // Matricula / Emblema central
+        int plateW = Math.max(6, carW * 18 / 100);
+        int plateH = Math.max(3, tailH);
+        int plateX = carX + (carW - plateW) / 2;
+        g.setColor(0xffd600);
+        g.fillRect(plateX, tailY, plateW, plateH);
+        g.setColor(0x000000);
+        g.drawLine(plateX + 1, tailY + 1, plateX + plateW - 2, tailY + 1);
+
+        // HUD discreto estilo arcade en pantalla completa o deck
+        if (h > 100) {
+            Font tinyFont = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
+            g.setFont(tinyFont);
+            g.setColor(0x00ffcc);
+            String speedStr = isPlaying ? "185 KM/H" : "IDLE";
+            int hudY = isScreensaverActive ? 32 : (y + 4);
+            g.drawString(speedStr, x + w - 6, hudY, Graphics.TOP | Graphics.RIGHT);
+        }
+    }
+
     private void paintActiveVisualizer(Graphics g, int x, int y, int w, int h) {
+        int oldClipX = g.getClipX();
+        int oldClipY = g.getClipY();
+        int oldClipW = g.getClipWidth();
+        int oldClipH = g.getClipHeight();
+        g.setClip(x, y, w, h);
+
         switch (activeVisualizer) {
             case VIZ_SCOPE:
                 paintScope(g, x, y, w, h);
@@ -780,6 +1282,12 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
                 break;
             case VIZ_FIRE:
                 paintFire(g, x, y, w, h);
+                break;
+            case VIZ_CUBE:
+                paintCube(g, x, y, w, h);
+                break;
+            case VIZ_ROAD:
+                paintRoad(g, x, y, w, h);
                 break;
             case VIZ_BARS:
             default:
@@ -791,6 +1299,7 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
             g.setColor(0x152233);
             g.drawRect(x, y, w - 1, h - 1);
         }
+        g.setClip(oldClipX, oldClipY, oldClipW, oldClipH);
     }
 
     private void paintScreensaver(Graphics g, int w, int h) {
@@ -841,6 +1350,8 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
             case VIZ_SCOPE: return "Laser";
             case VIZ_WARP:  return "Tunel 3D";
             case VIZ_FIRE:  return "Fuego";
+            case VIZ_CUBE:  return "Cubo 3D";
+            case VIZ_ROAD:  return "Pista 3D";
             case VIZ_BARS:
             default:        return "Espectro";
         }
@@ -848,7 +1359,10 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
 
     private void paintVizMenu(Graphics g, int w, int h) {
         int menuW = 216;
-        int menuH = 160;
+        int itemH = 20;
+        int titleH = 24;
+        int footerH = 18;
+        int menuH = titleH + (VIZ_MENU_ITEMS.length * itemH) + footerH + 10;
         int menuX = (w - menuW) / 2;
         int menuY = (h - menuH) / 2;
 
@@ -866,7 +1380,6 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
         g.drawRect(menuX + 1, menuY + 1, menuW - 3, menuH - 3);
 
         // Cabecera del menu
-        int titleH = 24;
         g.setColor(0x132337);
         g.fillRect(menuX + 2, menuY + 2, menuW - 4, titleH);
         g.setColor(0x00d2ff);
@@ -878,8 +1391,7 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
         g.drawString("EFECTOS VISUALES", menuX + (menuW / 2), menuY + 6, Graphics.TOP | Graphics.HCENTER);
 
         // Opciones del menu
-        int itemY = menuY + titleH + 6;
-        int itemH = 22;
+        int itemY = menuY + titleH + 5;
         Font itemFont = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL);
         g.setFont(itemFont);
 
@@ -926,7 +1438,7 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
         isVizMenuOpen = false;
         if (index >= 0 && index < VIZ_COUNT) {
             activeVisualizer = index;
-        } else if (index == 4) {
+        } else if (index == VIZ_COUNT) {
             isScreensaverActive = true;
         }
         repaint();
@@ -1178,12 +1690,14 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
                 return;
             }
 
-            // 5. Atajos directos con el teclado numerico 1..5
+            // 5. Atajos directos con el teclado numerico 1..7
             if (keyCode == KEY_NUM1) { executeVizMenuItem(0); return; }
             if (keyCode == KEY_NUM2) { executeVizMenuItem(1); return; }
             if (keyCode == KEY_NUM3) { executeVizMenuItem(2); return; }
             if (keyCode == KEY_NUM4) { executeVizMenuItem(3); return; }
             if (keyCode == KEY_NUM5) { executeVizMenuItem(4); return; }
+            if (keyCode == KEY_NUM6) { executeVizMenuItem(5); return; }
+            if (keyCode == KEY_NUM7) { executeVizMenuItem(6); return; }
             return;
         }
 
@@ -1376,12 +1890,13 @@ public class PlayerCanvas extends Canvas implements AudioEngineListener {
         // 1. Si el submenu de Efectos Visuales esta abierto
         if (isVizMenuOpen) {
             int menuW = 216;
-            int menuH = 160;
+            int itemH = 20;
+            int titleH = 24;
+            int footerH = 18;
+            int menuH = titleH + (VIZ_MENU_ITEMS.length * itemH) + footerH + 10;
             int menuX = (w - menuW) / 2;
             int menuY = (h - menuH) / 2;
-            int titleH = 24;
-            int itemY = menuY + titleH + 6;
-            int itemH = 22;
+            int itemY = menuY + titleH + 5;
 
             if (x >= menuX && x <= menuX + menuW && y >= itemY && y <= itemY + VIZ_MENU_ITEMS.length * itemH) {
                 int clickedIndex = (y - itemY) / itemH;
